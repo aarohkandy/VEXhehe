@@ -6,19 +6,25 @@
 #include "robot/ports.h"
 
 namespace {
-pros::Motor left_front(-robot::ports::kLeftDriveFrontMotor, pros::v5::MotorGears::green,
-                       pros::v5::MotorUnits::degrees);
-pros::Motor left_middle(-robot::ports::kLeftDriveMiddleMotor, pros::v5::MotorGears::green,
-                        pros::v5::MotorUnits::degrees);
-pros::Motor left_back(-robot::ports::kLeftDriveBackMotor, pros::v5::MotorGears::green,
-                      pros::v5::MotorUnits::degrees);
+pros::Motor left_front(robot::ports::kLeftDriveReversed ? -robot::ports::kLeftDriveFrontMotor
+                                                         : robot::ports::kLeftDriveFrontMotor,
+                       pros::v5::MotorGears::green, pros::v5::MotorUnits::degrees);
+pros::Motor left_middle(robot::ports::kLeftDriveReversed ? -robot::ports::kLeftDriveMiddleMotor
+                                                          : robot::ports::kLeftDriveMiddleMotor,
+                        pros::v5::MotorGears::green, pros::v5::MotorUnits::degrees);
+pros::Motor left_back(robot::ports::kLeftDriveReversed ? -robot::ports::kLeftDriveBackMotor
+                                                        : robot::ports::kLeftDriveBackMotor,
+                      pros::v5::MotorGears::green, pros::v5::MotorUnits::degrees);
 
-pros::Motor right_front(robot::ports::kRightDriveFrontMotor, pros::v5::MotorGears::green,
-                        pros::v5::MotorUnits::degrees);
-pros::Motor right_middle(robot::ports::kRightDriveMiddleMotor, pros::v5::MotorGears::green,
-                         pros::v5::MotorUnits::degrees);
-pros::Motor right_back(robot::ports::kRightDriveBackMotor, pros::v5::MotorGears::green,
-                       pros::v5::MotorUnits::degrees);
+pros::Motor right_front(robot::ports::kRightDriveReversed ? -robot::ports::kRightDriveFrontMotor
+                                                           : robot::ports::kRightDriveFrontMotor,
+                        pros::v5::MotorGears::green, pros::v5::MotorUnits::degrees);
+pros::Motor right_middle(robot::ports::kRightDriveReversed ? -robot::ports::kRightDriveMiddleMotor
+                                                            : robot::ports::kRightDriveMiddleMotor,
+                         pros::v5::MotorGears::green, pros::v5::MotorUnits::degrees);
+pros::Motor right_back(robot::ports::kRightDriveReversed ? -robot::ports::kRightDriveBackMotor
+                                                          : robot::ports::kRightDriveBackMotor,
+                       pros::v5::MotorGears::green, pros::v5::MotorUnits::degrees);
 
 int clamp_power(int value) { return std::clamp(value, -127, 127); }
 }  // namespace

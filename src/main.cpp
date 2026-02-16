@@ -1,66 +1,113 @@
 #include "main.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+
 #include "auton/motion.h"
+#include "robot/ports.h"
 #include "subsystems/drivetrain.h"
 #include "subsystems/indexer.h"
 #include "subsystems/intake.h"
-#include "subsystems/sensors.h"
 #include "subsystems/drive.h"
+#include "subsystems/localization.h"
+#include "subsystems/sensors.h"
+
+namespace {
+struct LoopStats {
+  std::uint32_t iterations = 0;
+  std::uint32_t min_us = 0xFFFFFFFFu;
+  std::uint32_t max_us = 0;
+  std::uint64_t total_us = 0;
+};
+
+int apply_deadband(int input, int deadband) { return (std::abs(input) < deadband) ? 0 : input; }
+
+void log_port_map(void) {
+  printf("PORT_MAP,LF=%d,LM=%d,LB=%d,RF=%d,RM=%d,RB=%d,IMU=%d,ODOM=%d\n",
+         robot::ports::kLeftDriveFrontMotor, robot::ports::kLeftDriveMiddleMotor,
+         robot::ports::kLeftDriveBackMotor, robot::ports::kRightDriveFrontMotor,
+         robot::ports::kRightDriveMiddleMotor, robot::ports::kRightDriveBackMotor,
+         robot::ports::kImuPort, robot::ports::kOdomRotationPort);
+  printf("PORT_MAP_REV,left=%d,right=%d\n", robot::ports::kLeftDriveReversed ? 1 : 0,
+         robot::ports::kRightDriveReversed ? 1 : 0);
+}
+
+void capture_loop_time(LoopStats* stats, std::uint32_t dt_us) {
+  stats->iterations++;
+  stats->total_us += dt_us;
+  stats->min_us = std::min(stats->min_us, dt_us);
+  stats->max_us = std::max(stats->max_us, dt_us);
+}
+
+void print_loop_stats(const char* label, const LoopStats& stats) {
+  if (stats.iterations == 0) return;
+  const double avg_us = static_cast<double>(stats.total_us) / static_cast<double>(stats.iterations);
+  const double hz = avg_us > 1e-6 ? 1e6 / avg_us : 0.0;
+  printf("LOOP_STATS,label=%s,iters=%lu,avg_us=%.1f,min_us=%lu,max_us=%lu,hz=%.2f\n", label,
+         static_cast<unsigned long>(stats.iterations), avg_us, static_cast<unsigned long>(stats.min_us),
+         static_cast<unsigned long>(stats.max_us), hz);
+}
+}  // namespace
 
 void initialize(void) {
+  log_port_map();
   drivetrain::init();
   intake::init();
   indexer::init();
   sensors::init();
   while (sensors::imu_calibrating()) pros::delay(20);
+  localization::reset_pose(0.0, 0.0, 0.0);
+  localization::init();
 }
 
-void disabled(void) {}
+void disabled(void) { drive::stop(); }
 
-void competition_initialize(void) {}
+void competition_initialize(void) {
+  localization::reset_pose(0.0, 0.0, 0.0);
+  printf("COMP_INIT,ready=1\n");
+}
 
 void autonomous(void) {
-  auton::MotionConstraints linear;
-  linear.max_speed = 26.0;
-  linear.max_accel = 60.0;
-  linear.timeout_ms = 4000;
-  linear.settle_error = 1.0;
-  linear.settle_time_ms = 250;
-  linear.overshoot_error = 3.0;
+  localization::reset_pose(0.0, 0.0, 0.0);
 
-  auton::MotionConstraints turn;
-  turn.max_speed = 120.0;
-  turn.max_accel = 240.0;
-  turn.timeout_ms = 2500;
-  turn.settle_error = 1.0;
-  turn.settle_time_ms = 200;
-  turn.overshoot_error = 4.0;
+  auton::GoToPointConstraints gtp{};
+  gtp.timeout_ms = 3600;
+  gtp.settle_time_ms = 250;
+  gtp.settle_distance_in = 1.0;
+  gtp.settle_heading_deg = 5.0;
+  gtp.linear_kp = 7.8;
+  gtp.linear_kd = 0.9;
+  gtp.heading_kp = 2.2;
+  gtp.heading_kd = 0.14;
+  gtp.max_forward_cmd = 95.0;
+  gtp.max_turn_cmd = 80.0;
 
-  const auton::MotionSummary forward = auton::drive_distance_inches(24.0, linear);
-  const auton::MotionSummary rotate = auton::turn_angle_deg(90.0, turn);
-  const auton::MotionSummary reverse = auton::drive_distance_inches(-24.0, linear);
+  const auton::MotionSummary p1 = auton::go_to_point_inches(28.0, 0.0, gtp);
+  const auton::MotionSummary p2 = auton::go_to_point_inches(48.0, 22.0, gtp);
+  const auton::MotionSummary p3 = auton::go_to_point_inches(20.0, 36.0, gtp);
 
-  printf("A1 result=%d err=%.2f over=%.2f t=%lu\n", static_cast<int>(forward.result),
-         forward.final_error, forward.max_overshoot, static_cast<unsigned long>(forward.elapsed_ms));
-  printf("A2 result=%d err=%.2f over=%.2f t=%lu\n", static_cast<int>(rotate.result),
-         rotate.final_error, rotate.max_overshoot, static_cast<unsigned long>(rotate.elapsed_ms));
-  printf("A3 result=%d err=%.2f over=%.2f t=%lu\n", static_cast<int>(reverse.result),
-         reverse.final_error, reverse.max_overshoot, static_cast<unsigned long>(reverse.elapsed_ms));
-  printf("A1 diag mismatch=%d cmd=%.1f rate=%.2f settleErr=%.3f\n", forward.mismatch_samples,
-         forward.max_command_abs, forward.peak_measured_rate, forward.settle_entry_error);
-  printf("A2 diag mismatch=%d cmd=%.1f rate=%.2f settleErr=%.3f\n", rotate.mismatch_samples,
-         rotate.max_command_abs, rotate.peak_measured_rate, rotate.settle_entry_error);
-  printf("A3 diag mismatch=%d cmd=%.1f rate=%.2f settleErr=%.3f\n", reverse.mismatch_samples,
-         reverse.max_command_abs, reverse.peak_measured_rate, reverse.settle_entry_error);
+  const localization::Pose end_pose = localization::pose();
+  printf("AUTO_SEG_1,result=%d,err=%.2f,t=%lu,mismatch=%d\n", static_cast<int>(p1.result),
+         p1.final_error, static_cast<unsigned long>(p1.elapsed_ms), p1.mismatch_samples);
+  printf("AUTO_SEG_2,result=%d,err=%.2f,t=%lu,mismatch=%d\n", static_cast<int>(p2.result),
+         p2.final_error, static_cast<unsigned long>(p2.elapsed_ms), p2.mismatch_samples);
+  printf("AUTO_SEG_3,result=%d,err=%.2f,t=%lu,mismatch=%d\n", static_cast<int>(p3.result),
+         p3.final_error, static_cast<unsigned long>(p3.elapsed_ms), p3.mismatch_samples);
+  printf("AUTO_POSE_FINAL,x=%.2f,y=%.2f,h=%.2f\n", end_pose.x_in, end_pose.y_in, end_pose.heading_deg);
 }
 
 void opcontrol(void) {
   pros::Controller master(pros::E_CONTROLLER_MASTER);
+  constexpr std::uint32_t kLoopDtMs = 10;
+  LoopStats driver_loop_stats{};
+  std::uint32_t report_timer_ms = 0;
 
   while (true) {
-    const int forward = master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
-    const int turn = master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
-    drive::arcade(forward, turn);
+    const std::uint32_t loop_start_us = pros::micros();
+    const int left = apply_deadband(master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y), 5);
+    const int right = apply_deadband(master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_Y), 5);
+    drive::tank(left, right);
 
     if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
       intake::set_mode(intake::Mode::kCollect);
@@ -75,6 +122,12 @@ void opcontrol(void) {
 
     intake::update();
     indexer::update();
-    pros::delay(10);
+    capture_loop_time(&driver_loop_stats, pros::micros() - loop_start_us);
+    report_timer_ms += kLoopDtMs;
+    if (report_timer_ms >= 2000) {
+      print_loop_stats("opcontrol", driver_loop_stats);
+      report_timer_ms = 0;
+    }
+    pros::delay(kLoopDtMs);
   }
 }

@@ -9,6 +9,8 @@ const char* motion_kind_name(auton::MotionKind kind) {
       return "drive";
     case auton::MotionKind::kTurn:
       return "turn";
+    case auton::MotionKind::kGoToPoint:
+      return "goto_point";
     default:
       return "unknown";
   }

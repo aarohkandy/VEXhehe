@@ -5,6 +5,7 @@
 
 #include "api.h"
 #include "subsystems/drivetrain.h"
+#include "subsystems/localization.h"
 #include "subsystems/sensors.h"
 
 namespace {
@@ -32,6 +33,29 @@ struct Pid {
 auton::MotionSummary g_last_summary{};
 
 double clamp(double value, double lo, double hi) { return std::max(lo, std::min(value, hi)); }
+
+struct LoopStats {
+  std::uint32_t iterations = 0;
+  std::uint32_t min_us = 0xFFFFFFFFu;
+  std::uint32_t max_us = 0;
+  std::uint64_t total_us = 0;
+};
+
+void capture_loop_time(LoopStats* stats, std::uint32_t dt_us) {
+  stats->iterations++;
+  stats->total_us += dt_us;
+  stats->min_us = std::min(stats->min_us, dt_us);
+  stats->max_us = std::max(stats->max_us, dt_us);
+}
+
+void print_loop_stats(const char* label, const LoopStats& stats) {
+  if (stats.iterations == 0) return;
+  const double avg_us = static_cast<double>(stats.total_us) / static_cast<double>(stats.iterations);
+  const double hz = avg_us > 1e-6 ? 1e6 / avg_us : 0.0;
+  printf("LOOP_STATS,label=%s,iters=%lu,avg_us=%.1f,min_us=%lu,max_us=%lu,hz=%.2f\n", label,
+         static_cast<unsigned long>(stats.iterations), avg_us, static_cast<unsigned long>(stats.min_us),
+         static_cast<unsigned long>(stats.max_us), hz);
+}
 
 double wrap_deg(double angle) {
   while (angle > 180.0) angle -= 360.0;
@@ -119,6 +143,8 @@ void set_result_by_priority(auton::MotionSummary* summary, bool timeout, bool ov
     summary->result = auton::MotionResult::kTimeout;
   }
 }
+
+int clamp_cmd(double cmd) { return static_cast<int>(clamp(cmd, -127.0, 127.0)); }
 }  // namespace
 
 namespace auton {
@@ -135,11 +161,13 @@ MotionSummary drive_distance_inches(double target_inches, const MotionConstraint
   std::uint32_t settled_ms = 0;
   int mismatch_samples = 0;
   bool overshot = false;
+  LoopStats loop_stats{};
 
   MotionSummary summary{};
   summary.max_overshoot = 0.0;
 
   while (t_ms < constraints.timeout_ms) {
+    const std::uint32_t start_us = pros::micros();
     const double elapsed_s = static_cast<double>(t_ms) / 1000.0;
     double prof_s = 0.0;
     double prof_v = 0.0;
@@ -154,7 +182,7 @@ MotionSummary drive_distance_inches(double target_inches, const MotionConstraint
     const double output = clamp(ff + pid_out, -127.0, 127.0);
     summary.max_command_abs = std::max(summary.max_command_abs, std::abs(output));
 
-    drivetrain::set_tank(static_cast<int>(output), static_cast<int>(output));
+    drivetrain::set_tank(clamp_cmd(output), clamp_cmd(output));
 
     const double measured_rate = drivetrain::average_velocity_rpm();
     summary.peak_measured_rate = std::max(summary.peak_measured_rate, std::abs(measured_rate));
@@ -193,6 +221,7 @@ MotionSummary drive_distance_inches(double target_inches, const MotionConstraint
     });
 
     t_ms += kLoopDtMs;
+    capture_loop_time(&loop_stats, pros::micros() - start_us);
     pros::delay(kLoopDtMs);
   }
 
@@ -202,6 +231,7 @@ MotionSummary drive_distance_inches(double target_inches, const MotionConstraint
   set_result_by_priority(&summary, t_ms >= constraints.timeout_ms, overshot);
   g_last_summary = summary;
   diag::end_motion_trace(summary);
+  print_loop_stats("drive_distance", loop_stats);
   return summary;
 }
 
@@ -217,6 +247,7 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
   std::uint32_t settled_ms = 0;
   int mismatch_samples = 0;
   bool overshot = false;
+  LoopStats loop_stats{};
 
   MotionSummary summary{};
   summary.max_overshoot = 0.0;
@@ -224,6 +255,7 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
   double last_heading = sensors::heading_deg();
 
   while (t_ms < constraints.timeout_ms) {
+    const std::uint32_t start_us = pros::micros();
     const double elapsed_s = static_cast<double>(t_ms) / 1000.0;
     double prof_s = 0.0;
     double prof_v = 0.0;
@@ -238,7 +270,7 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
     const double output = clamp(ff + pid_out, -127.0, 127.0);
     summary.max_command_abs = std::max(summary.max_command_abs, std::abs(output));
 
-    drivetrain::set_tank(static_cast<int>(-output), static_cast<int>(output));
+    drivetrain::set_tank(clamp_cmd(-output), clamp_cmd(output));
 
     const double heading_rate = wrap_deg(measured_heading - last_heading) / kLoopDtSec;
     last_heading = measured_heading;
@@ -279,6 +311,7 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
     });
 
     t_ms += kLoopDtMs;
+    capture_loop_time(&loop_stats, pros::micros() - start_us);
     pros::delay(kLoopDtMs);
   }
 
@@ -288,6 +321,104 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
   set_result_by_priority(&summary, t_ms >= constraints.timeout_ms, overshot);
   g_last_summary = summary;
   diag::end_motion_trace(summary);
+  print_loop_stats("turn_angle", loop_stats);
+  return summary;
+}
+
+MotionSummary go_to_point_inches(double x_in, double y_in, const GoToPointConstraints& constraints) {
+  diag::begin_motion_trace("go_to_point_inches", MotionKind::kGoToPoint);
+
+  Pid linear_pid{constraints.linear_kp, 0.0, constraints.linear_kd};
+  Pid heading_pid{constraints.heading_kp, 0.0, constraints.heading_kd};
+
+  std::uint32_t t_ms = 0;
+  std::uint32_t settled_ms = 0;
+  int mismatch_samples = 0;
+  LoopStats loop_stats{};
+
+  MotionSummary summary{};
+  summary.max_overshoot = 0.0;
+
+  double previous_distance = 0.0;
+  bool previous_distance_set = false;
+
+  while (t_ms < constraints.timeout_ms) {
+    const std::uint32_t start_us = pros::micros();
+    const localization::Pose state = localization::pose();
+
+    const double dx = x_in - state.x_in;
+    const double dy = y_in - state.y_in;
+    const double distance = std::hypot(dx, dy);
+    const double target_heading = std::atan2(dy, dx) * (180.0 / 3.14159265358979323846);
+    double heading_error = wrap_deg(target_heading - state.heading_deg);
+    double drive_direction = 1.0;
+
+    if (constraints.allow_reverse && std::abs(heading_error) > 95.0) {
+      drive_direction = -1.0;
+      heading_error = wrap_deg(heading_error > 0.0 ? heading_error - 180.0 : heading_error + 180.0);
+    }
+
+    const double forward_cmd =
+        clamp(drive_direction * pid_step(&linear_pid, distance, kLoopDtSec), -constraints.max_forward_cmd,
+              constraints.max_forward_cmd);
+    const double turn_cmd =
+        clamp(pid_step(&heading_pid, heading_error, kLoopDtSec), -constraints.max_turn_cmd,
+              constraints.max_turn_cmd);
+
+    const double left_cmd = forward_cmd - turn_cmd;
+    const double right_cmd = forward_cmd + turn_cmd;
+    drivetrain::set_tank(clamp_cmd(left_cmd), clamp_cmd(right_cmd));
+    summary.max_command_abs = std::max(summary.max_command_abs, std::max(std::abs(left_cmd), std::abs(right_cmd)));
+
+    const double measured_rate = drivetrain::average_velocity_rpm();
+    summary.peak_measured_rate = std::max(summary.peak_measured_rate, std::abs(measured_rate));
+    if (sign_mismatch(forward_cmd, measured_rate)) mismatch_samples++;
+    if (mismatch_samples >= 15) summary.direction_mismatch = true;
+    summary.mismatch_samples = mismatch_samples;
+
+    if (previous_distance_set && (previous_distance - distance) < -constraints.settle_distance_in) {
+      summary.max_overshoot = std::max(summary.max_overshoot, distance - previous_distance);
+    }
+    previous_distance = distance;
+    previous_distance_set = true;
+
+    if ((distance <= constraints.settle_distance_in) &&
+        (std::abs(heading_error) <= constraints.settle_heading_deg)) {
+      settled_ms += kLoopDtMs;
+      if (settled_ms >= constraints.settle_time_ms) {
+        summary.settled = true;
+        summary.final_error = distance;
+        summary.settle_entry_error = distance;
+        break;
+      }
+    } else {
+      settled_ms = 0;
+    }
+
+    diag::log_motion_sample(MotionTraceSample{
+        .kind = MotionKind::kGoToPoint,
+        .t_ms = t_ms,
+        .target = 0.0,
+        .measured = distance,
+        .error = distance,
+        .command = forward_cmd,
+        .measured_rate = measured_rate,
+        .direction_mismatch = sign_mismatch(forward_cmd, measured_rate),
+    });
+
+    t_ms += kLoopDtMs;
+    capture_loop_time(&loop_stats, pros::micros() - start_us);
+    pros::delay(kLoopDtMs);
+  }
+
+  drivetrain::stop();
+  const localization::Pose final_state = localization::pose();
+  summary.elapsed_ms = t_ms;
+  summary.final_error = std::hypot(x_in - final_state.x_in, y_in - final_state.y_in);
+  set_result_by_priority(&summary, t_ms >= constraints.timeout_ms, false);
+  g_last_summary = summary;
+  diag::end_motion_trace(summary);
+  print_loop_stats("go_to_point", loop_stats);
   return summary;
 }
 

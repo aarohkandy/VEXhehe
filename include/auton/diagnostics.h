@@ -26,6 +26,7 @@ struct MotionSummary {
 enum class MotionKind {
   kDrive = 0,
   kTurn,
+  kGoToPoint,
 };
 
 struct MotionTraceSample {
