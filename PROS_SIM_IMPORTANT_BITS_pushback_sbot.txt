@@ -1,0 +1,53 @@
+pushback_sbot - PROS Simulation Important Bits (No Code Copy)
+
+1) Core architecture
+- Entry + mode switching: src/main.cpp
+- Drive subsystem: src/drivetrain.cpp
+- Intake subsystem: src/intake.cpp
+- Indexer subsystem: src/indexer.cpp
+- Color sorting override: src/color_sensor_system.cpp
+- LemLib wiring/tuning: src/lemlib_config_sbot.cpp
+- Autonomous flow + helpers: src/autonomous_match_awp.cpp, src/autonomous_infrastructure.cpp, src/autonomous_match_helpers.cpp
+
+2) Where direction mistakes are controlled
+- Motor direction flags and ports live in include/config_sbot.h.
+- Drivetrain uses left-side reversed direction and right-side normal direction in both driver and LemLib setup.
+- Intake and indexer each have dedicated reversed flags.
+
+3) What to log in simulation for your goal
+- time_ms
+- left_cmd, right_cmd
+- measured_left_vel, measured_right_vel (sign and magnitude)
+- intake_mode, indexer_mode
+- intake_measured_vel, indexer_measured_vel
+- pose_x, pose_y, heading
+- target_x, target_y, target_heading (when in autonomous)
+- error_distance, error_heading
+
+4) Key diagnostics to implement
+- Motor reversed detection:
+  - If |cmd| > threshold and measured velocity sign is opposite for N samples, raise warning.
+- Overshoot detection (turn):
+  - Detect heading error zero crossing and record peak opposite-side error.
+- Overshoot detection (drive):
+  - Detect distance error crossing and record farthest overrun before settle.
+- Settling detection:
+  - Require error within tolerance for hold time; otherwise mark timeout/not-settled.
+
+5) Existing behavior that helps simulation checks
+- Autonomous helpers already use timeout and stall-aware waits.
+- Opcontrol runs at fixed loop delay and centralizes mode toggles.
+- Color sorting may force indexer reverse temporarily; account for that to avoid false "wrong direction" alerts.
+
+6) Minimal simulation integration strategy for this PROS codebase
+- Add a hardware abstraction wrapper around motor writes + sensor reads.
+- Keep existing subsystem logic unchanged; route commands through wrapper.
+- In sim mode, wrapper returns simulated sensor/motor states and logs diagnostics.
+- In robot mode, wrapper forwards to PROS devices directly.
+
+7) First things to validate after integration
+- Straight tank forward command: both sides positive measured velocity.
+- In-place turn command: left/right signs opposite as expected.
+- Intake collect mode: main/helper directions match expected feed behavior.
+- Indexer forward mode: measured indexer direction matches feed-forward expectation.
+- Basic auton move/turn: overshoot and settle metrics are produced each run.
