@@ -35,6 +35,7 @@ python3 run.py --pros-module scenarios.pros_auton_example --out output/pros_test
 python3 run.py --scenario scenarios/default_auton.yaml --out output/vis --visualize
 python3 tools/analyze_trace.py output/vis/trace.csv --report output/vis/report.json
 python3 tools/visualize_trace.py output/vis/trace.csv
+python3 tools/validate_suite.py
 ```
 
 ## Notes
@@ -44,3 +45,7 @@ python3 tools/visualize_trace.py output/vis/trace.csv
   - reverse motor mismatch events
   - turn overshoot estimate (scripted turn segments)
   - stop drift estimate (scripted straight-then-stop segments)
+- `tools/validate_suite.py` runs a multi-case regression:
+  - clean baseline expected to pass
+  - forced overshoot expected to trigger `turn_overshoot_high`
+  - forced motor-sign fault expected to trigger `motor_direction_mismatch_detected`

@@ -26,3 +26,17 @@ Install PROS CLI and initialize/build tooling in this folder:
 pros c apply
 pros make
 ```
+
+## Motion Diagnostics
+
+Autonomous motion now emits structured trace lines to terminal:
+
+- `MOTION_TRACE_BEGIN,...`
+- `MOTION_TRACE,...`
+- `MOTION_TRACE_END,...`
+
+Parse captured terminal logs with:
+
+```bash
+python3 tools/pros_trace_parser.py <pros_terminal_log.txt>
+```

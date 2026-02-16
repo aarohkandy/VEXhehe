@@ -125,6 +125,7 @@ namespace auton {
 MotionSummary drive_distance_inches(double target_inches, const MotionConstraints& constraints) {
   drivetrain::tare_positions();
   sensors::tare_odom();
+  diag::begin_motion_trace("drive_distance_inches", MotionKind::kDrive);
 
   const double sign = target_inches >= 0.0 ? 1.0 : -1.0;
   const Profile profile = make_profile(target_inches, constraints.max_speed, constraints.max_accel);
@@ -151,12 +152,15 @@ MotionSummary drive_distance_inches(double target_inches, const MotionConstraint
     const double ff = sign * prof_v * 2.2;
     const double pid_out = pid_step(&pid, error, kLoopDtSec);
     const double output = clamp(ff + pid_out, -127.0, 127.0);
+    summary.max_command_abs = std::max(summary.max_command_abs, std::abs(output));
 
     drivetrain::set_tank(static_cast<int>(output), static_cast<int>(output));
 
     const double measured_rate = drivetrain::average_velocity_rpm();
+    summary.peak_measured_rate = std::max(summary.peak_measured_rate, std::abs(measured_rate));
     if (sign_mismatch(output, measured_rate)) mismatch_samples++;
     if (mismatch_samples >= 15) summary.direction_mismatch = true;
+    summary.mismatch_samples = mismatch_samples;
 
     const double terminal_error = (sign * target_inches) - measured_pos;
     if ((sign * measured_pos) > std::abs(target_inches)) {
@@ -170,11 +174,23 @@ MotionSummary drive_distance_inches(double target_inches, const MotionConstraint
       if (settled_ms >= constraints.settle_time_ms) {
         summary.settled = true;
         summary.final_error = terminal_error;
+        summary.settle_entry_error = terminal_error;
         break;
       }
     } else {
       settled_ms = 0;
     }
+
+    diag::log_motion_sample(MotionTraceSample{
+        .kind = MotionKind::kDrive,
+        .t_ms = t_ms,
+        .target = target_pos,
+        .measured = measured_pos,
+        .error = error,
+        .command = output,
+        .measured_rate = measured_rate,
+        .direction_mismatch = sign_mismatch(output, measured_rate),
+    });
 
     t_ms += kLoopDtMs;
     pros::delay(kLoopDtMs);
@@ -185,11 +201,13 @@ MotionSummary drive_distance_inches(double target_inches, const MotionConstraint
   summary.final_error = (sign * target_inches) - sensors::odom_inches();
   set_result_by_priority(&summary, t_ms >= constraints.timeout_ms, overshot);
   g_last_summary = summary;
+  diag::end_motion_trace(summary);
   return summary;
 }
 
 MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& constraints) {
   sensors::reset_heading();
+  diag::begin_motion_trace("turn_angle_deg", MotionKind::kTurn);
 
   const double sign = target_degrees >= 0.0 ? 1.0 : -1.0;
   const Profile profile = make_profile(target_degrees, constraints.max_speed, constraints.max_accel);
@@ -218,14 +236,17 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
     const double ff = sign * prof_v * 0.5;
     const double pid_out = pid_step(&pid, error, kLoopDtSec);
     const double output = clamp(ff + pid_out, -127.0, 127.0);
+    summary.max_command_abs = std::max(summary.max_command_abs, std::abs(output));
 
     drivetrain::set_tank(static_cast<int>(-output), static_cast<int>(output));
 
     const double heading_rate = wrap_deg(measured_heading - last_heading) / kLoopDtSec;
     last_heading = measured_heading;
+    summary.peak_measured_rate = std::max(summary.peak_measured_rate, std::abs(heading_rate));
 
     if (sign_mismatch(output, heading_rate)) mismatch_samples++;
     if (mismatch_samples >= 10) summary.direction_mismatch = true;
+    summary.mismatch_samples = mismatch_samples;
 
     const double terminal_error = wrap_deg(target_degrees - measured_heading);
     if ((sign * measured_heading) > std::abs(target_degrees)) {
@@ -239,11 +260,23 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
       if (settled_ms >= constraints.settle_time_ms) {
         summary.settled = true;
         summary.final_error = terminal_error;
+        summary.settle_entry_error = terminal_error;
         break;
       }
     } else {
       settled_ms = 0;
     }
+
+    diag::log_motion_sample(MotionTraceSample{
+        .kind = MotionKind::kTurn,
+        .t_ms = t_ms,
+        .target = target_heading,
+        .measured = measured_heading,
+        .error = error,
+        .command = output,
+        .measured_rate = heading_rate,
+        .direction_mismatch = sign_mismatch(output, heading_rate),
+    });
 
     t_ms += kLoopDtMs;
     pros::delay(kLoopDtMs);
@@ -254,6 +287,7 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
   summary.final_error = wrap_deg(target_degrees - wrap_deg(sensors::heading_deg()));
   set_result_by_priority(&summary, t_ms >= constraints.timeout_ms, overshot);
   g_last_summary = summary;
+  diag::end_motion_trace(summary);
   return summary;
 }
 

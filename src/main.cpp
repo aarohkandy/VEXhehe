@@ -46,6 +46,12 @@ void autonomous(void) {
          rotate.final_error, rotate.max_overshoot, static_cast<unsigned long>(rotate.elapsed_ms));
   printf("A3 result=%d err=%.2f over=%.2f t=%lu\n", static_cast<int>(reverse.result),
          reverse.final_error, reverse.max_overshoot, static_cast<unsigned long>(reverse.elapsed_ms));
+  printf("A1 diag mismatch=%d cmd=%.1f rate=%.2f settleErr=%.3f\n", forward.mismatch_samples,
+         forward.max_command_abs, forward.peak_measured_rate, forward.settle_entry_error);
+  printf("A2 diag mismatch=%d cmd=%.1f rate=%.2f settleErr=%.3f\n", rotate.mismatch_samples,
+         rotate.max_command_abs, rotate.peak_measured_rate, rotate.settle_entry_error);
+  printf("A3 diag mismatch=%d cmd=%.1f rate=%.2f settleErr=%.3f\n", reverse.mismatch_samples,
+         reverse.max_command_abs, reverse.peak_measured_rate, reverse.settle_entry_error);
 }
 
 void opcontrol(void) {
