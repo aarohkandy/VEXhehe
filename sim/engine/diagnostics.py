@@ -24,11 +24,15 @@ class DiagnosticsTracker:
         cmd_threshold: float = 0.2,
         wheel_rps_threshold: float = 0.35,
         reverse_window_s: float = 0.15,
+        turn_overshoot_issue_deg: float = 18.0,
+        stop_drift_issue_m: float = 0.10,
     ):
         self.dt_s = dt_s
         self.cmd_threshold = cmd_threshold
         self.wheel_rps_threshold = wheel_rps_threshold
         self.reverse_window_s = reverse_window_s
+        self.turn_overshoot_issue_deg = turn_overshoot_issue_deg
+        self.stop_drift_issue_m = stop_drift_issue_m
 
         self._left_bad_steps = 0
         self._right_bad_steps = 0
@@ -107,9 +111,9 @@ class DiagnosticsTracker:
         issues: list[str] = []
         if reverse_summary["event_count"] > 0:
             issues.append("motor_direction_mismatch_detected")
-        if float(overshoot_summary["max_turn_overshoot_deg"]) > 5.0:
+        if float(overshoot_summary["max_turn_overshoot_deg"]) > self.turn_overshoot_issue_deg:
             issues.append("turn_overshoot_high")
-        if float(overshoot_summary["max_stop_drift_m"]) > 0.10:
+        if float(overshoot_summary["max_stop_drift_m"]) > self.stop_drift_issue_m:
             issues.append("stop_drift_high")
 
         return {

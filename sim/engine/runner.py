@@ -8,11 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from random import Random
 
-from .auton import ScriptedAuton
+from .auton import ScriptedAuton, WaypointPathAuton
 from .config import ConfigManager
 from .diagnostics import DiagnosticsTracker
 from .motor import MotorModel
 from .physics import DynamicsEngine
+from .pygame_live import PygameLiveViewer
 from .reporter import TraceWriter
 from .sensors import SensorModel
 from .types import MotorGroupState, RobotState, SimStepOutput
@@ -70,12 +71,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Headless VEX simulator")
     p.add_argument("--config-dir", default="config", type=str)
     p.add_argument("--scenario", default="scenarios/default_auton.yaml", type=str)
+    p.add_argument("--waypoint-path", default=None, type=str)
     p.add_argument("--pros-module", default=None, type=str)
     p.add_argument("--out", default="output/run", type=str)
     p.add_argument("--duration", default=None, type=float)
     p.add_argument("--realtime", action="store_true", default=True)
     p.add_argument("--no-realtime", action="store_true")
     p.add_argument("--visualize", action="store_true")
+    p.add_argument("--visualize-pygame", action="store_true")
     return p
 
 
@@ -122,6 +125,8 @@ def main() -> None:
     if args.pros_module:
         buffer = ProsControlBuffer()
         controller = ProsAdapter(args.pros_module, buffer)
+    elif args.waypoint_path:
+        controller = WaypointPathAuton.from_yaml((root / args.waypoint_path).resolve())
     else:
         scripted = ScriptedAuton.from_yaml((root / args.scenario).resolve())
         controller = scripted
@@ -131,6 +136,7 @@ def main() -> None:
     writer = TraceWriter(out_dir)
     diagnostics = DiagnosticsTracker(run.dt_s)
     live = LiveVisualizer() if args.visualize else None
+    live_pg = PygameLiveViewer() if args.visualize_pygame else None
 
     state = RobotState()
     left_group = MotorGroupState()
@@ -143,7 +149,10 @@ def main() -> None:
     while t < run.duration_s:
         wall_loop_start = time.perf_counter()
 
-        left_cmd, right_cmd = controller.command(run.dt_s)
+        if isinstance(controller, WaypointPathAuton):
+            left_cmd, right_cmd = controller.command(run.dt_s, state)
+        else:
+            left_cmd, right_cmd = controller.command(run.dt_s)
         left_group.cmd = left_cmd
         right_group.cmd = right_cmd
 
@@ -204,6 +213,34 @@ def main() -> None:
         )
         if live is not None:
             live.update(t, state.x_m, state.y_m, state.theta_rad)
+        if live_pg is not None:
+            status = ""
+            target_xy = None
+            if isinstance(controller, ScriptedAuton):
+                status = (
+                    f"MODE=SCRIPTED  phase={controller.current_index()}/{controller.segment_count()} "
+                    f"{controller.current_label()}  cmdL={left_cmd:+.2f} cmdR={right_cmd:+.2f}"
+                )
+            elif isinstance(controller, WaypointPathAuton):
+                status = (
+                    f"MODE=WAYPOINT  target={controller.target_index()}/{controller.waypoint_count()-1} "
+                    f"cmdL={left_cmd:+.2f} cmdR={right_cmd:+.2f}"
+                )
+                target_xy = controller.current_target()
+            else:
+                status = f"MODE=PROS  cmdL={left_cmd:+.2f} cmdR={right_cmd:+.2f}"
+            live_pg.update(
+                t,
+                state.x_m,
+                state.y_m,
+                state.theta_rad,
+                status_text=status,
+                target_xy=target_xy,
+                left_cmd=left_cmd,
+                right_cmd=right_cmd,
+            )
+            if live_pg.should_close():
+                break
 
         if t - last_reload_check >= run.reload_period_s:
             last_reload_check = t
@@ -246,3 +283,5 @@ def main() -> None:
     if live is not None:
         print("Close the visualization window to exit.")
         live.wait_until_closed()
+    if live_pg is not None:
+        live_pg.close()

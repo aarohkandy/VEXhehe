@@ -33,6 +33,8 @@ python3 run.py --out output/demo --duration 15
 python3 run.py --scenario scenarios/default_auton.yaml --out output/run2
 python3 run.py --pros-module scenarios.pros_auton_example --out output/pros_test
 python3 run.py --scenario scenarios/default_auton.yaml --out output/vis --visualize
+python3 run.py --scenario scenarios/simple_diagnostic_test.yaml --out output/simple_live --duration 8 --visualize-pygame
+python3 run.py --waypoint-path scenarios/complex_waypoint_course.yaml --out output/complex_live --duration 22 --visualize-pygame
 python3 tools/analyze_trace.py output/vis/trace.csv --report output/vis/report.json
 python3 tools/visualize_trace.py output/vis/trace.csv
 python3 tools/validate_suite.py
@@ -45,6 +47,8 @@ python3 tools/validate_suite.py
   - reverse motor mismatch events
   - turn overshoot estimate (scripted turn segments)
   - stop drift estimate (scripted straight-then-stop segments)
+- `--waypoint-path` runs a live state-feedback controller over waypoint geometry
+  (real simulation loop, not pre-rendered video).
 - `tools/validate_suite.py` runs a multi-case regression:
   - clean baseline expected to pass
   - forced overshoot expected to trigger `turn_overshoot_high`
