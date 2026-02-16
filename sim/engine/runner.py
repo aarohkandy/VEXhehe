@@ -10,11 +10,13 @@ from random import Random
 
 from .auton import ScriptedAuton
 from .config import ConfigManager
+from .diagnostics import DiagnosticsTracker
 from .motor import MotorModel
 from .physics import DynamicsEngine
 from .reporter import TraceWriter
 from .sensors import SensorModel
 from .types import MotorGroupState, RobotState, SimStepOutput
+from .visualizer import LiveVisualizer
 
 
 @dataclass
@@ -73,6 +75,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--duration", default=None, type=float)
     p.add_argument("--realtime", action="store_true", default=True)
     p.add_argument("--no-realtime", action="store_true")
+    p.add_argument("--visualize", action="store_true")
     return p
 
 
@@ -115,14 +118,19 @@ def main() -> None:
         count=robot.motor_count_right,
     )
 
+    scripted_segments = None
     if args.pros_module:
         buffer = ProsControlBuffer()
         controller = ProsAdapter(args.pros_module, buffer)
     else:
-        controller = ScriptedAuton.from_yaml((root / args.scenario).resolve())
+        scripted = ScriptedAuton.from_yaml((root / args.scenario).resolve())
+        controller = scripted
+        scripted_segments = scripted.segments
 
     out_dir = (root / args.out).resolve()
     writer = TraceWriter(out_dir)
+    diagnostics = DiagnosticsTracker(run.dt_s)
+    live = LiveVisualizer() if args.visualize else None
 
     state = RobotState()
     left_group = MotorGroupState()
@@ -158,7 +166,27 @@ def main() -> None:
         right_group.current_a = ri
 
         state, slip_left, slip_right = dyn.step(state, run.dt_s, lt, rt)
+        left_wheel_rps_out = (
+            (state.vx_mps - state.omega_rps * (robot.track_width_m / 2.0))
+            / max(1e-6, robot.wheel_radius_m)
+            / (2.0 * 3.141592653589793)
+        )
+        right_wheel_rps_out = (
+            (state.vx_mps + state.omega_rps * (robot.track_width_m / 2.0))
+            / max(1e-6, robot.wheel_radius_m)
+            / (2.0 * 3.141592653589793)
+        )
         sensor = sensors.sample(t, state)
+        diagnostics.process(
+            time_s=t,
+            x_m=state.x_m,
+            y_m=state.y_m,
+            theta_rad=state.theta_rad,
+            left_cmd=left_cmd,
+            right_cmd=right_cmd,
+            left_wheel_rps=left_wheel_rps_out,
+            right_wheel_rps=right_wheel_rps_out,
+        )
 
         writer.write(
             SimStepOutput(
@@ -167,11 +195,15 @@ def main() -> None:
                 sensor=sensor,
                 left_cmd=left_cmd,
                 right_cmd=right_cmd,
+                left_wheel_rps=left_wheel_rps_out,
+                right_wheel_rps=right_wheel_rps_out,
                 battery_v=battery_v,
                 slip_left_mps=slip_left,
                 slip_right_mps=slip_right,
             )
         )
+        if live is not None:
+            live.update(t, state.x_m, state.y_m, state.theta_rad)
 
         if t - last_reload_check >= run.reload_period_s:
             last_reload_check = t
@@ -201,10 +233,16 @@ def main() -> None:
                 time.sleep(sleep_s)
 
     writer.close()
-    report_path = writer.write_report(out_dir, t)
+    diag_summary = diagnostics.finalize(scripted_segments)
+    report_path = writer.write_report(out_dir, t, diagnostics=diag_summary)
     sim_elapsed = time.perf_counter() - sim_start
 
     print(f"Simulation complete in {sim_elapsed:.3f}s (sim time {t:.3f}s)")
     print(f"Trace: {writer.trace_path}")
     print(f"Events: {writer.events_path}")
     print(f"Report: {report_path}")
+    if diag_summary.get("issue_count", 0):
+        print(f"Diagnostics issues: {diag_summary['issue_count']} -> {diag_summary.get('issues', [])}")
+    if live is not None:
+        print("Close the visualization window to exit.")
+        live.wait_until_closed()

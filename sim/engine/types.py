@@ -35,6 +35,8 @@ class SimStepOutput:
     sensor: SensorFrame
     left_cmd: float
     right_cmd: float
+    left_wheel_rps: float
+    right_wheel_rps: float
     battery_v: float
     slip_left_mps: float
     slip_right_mps: float

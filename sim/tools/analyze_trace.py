@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 from pathlib import Path
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Analyze simulator trace")
     p.add_argument("trace", type=str)
+    p.add_argument("--report", type=str, default=None, help="Optional report.json path")
     args = p.parse_args()
 
     path = Path(args.trace)
@@ -30,6 +32,16 @@ def main() -> None:
     print(f"final pose: x={float(final['x_m']):.3f} m, y={float(final['y_m']):.3f} m, theta={float(final['theta_rad']):.3f} rad")
     print(f"max speed: {max_speed:.3f} m/s")
     print(f"max slip: {max_slip:.3f} m/s")
+
+    if args.report:
+        report_path = Path(args.report)
+        if report_path.exists():
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            diag = report.get("diagnostics", {})
+            issues = diag.get("issues", [])
+            print(f"diagnostic issues: {len(issues)}")
+            if issues:
+                print(f"issues list: {issues}")
 
 
 if __name__ == "__main__":

@@ -31,6 +31,8 @@ class TraceWriter:
                 "omega_rps",
                 "left_cmd",
                 "right_cmd",
+                "left_wheel_rps",
+                "right_wheel_rps",
                 "battery_v",
                 "imu_heading_deg",
                 "rotation_left_deg",
@@ -62,6 +64,8 @@ class TraceWriter:
                 f"{out.state.omega_rps:.6f}",
                 f"{out.left_cmd:.4f}",
                 f"{out.right_cmd:.4f}",
+                f"{out.left_wheel_rps:.6f}",
+                f"{out.right_wheel_rps:.6f}",
                 f"{out.battery_v:.4f}",
                 f"{out.sensor.imu_heading_deg:.4f}",
                 f"{out.sensor.rotation_left_deg:.4f}",
@@ -78,7 +82,12 @@ class TraceWriter:
         self._trace_f.close()
         self._events_f.close()
 
-    def write_report(self, out_dir: Path, duration_s: float) -> Path:
+    def write_report(
+        self,
+        out_dir: Path,
+        duration_s: float,
+        diagnostics: dict[str, object] | None = None,
+    ) -> Path:
         report_path = out_dir / "report.json"
         last = self.last
         summary = {
@@ -93,6 +102,7 @@ class TraceWriter:
                 "vy_mps": last.state.vy_mps if last else 0.0,
                 "omega_rps": last.state.omega_rps if last else 0.0,
             },
+            "diagnostics": diagnostics or {},
         }
         report_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
         return report_path
