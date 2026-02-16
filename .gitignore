@@ -1,0 +1,14 @@
+build/
+bin/
+*.bin
+*.elf
+*.o
+*.d
+.vscode/
+.cache/
+compile_commands.json
+temp.log
+temp.errors
+*.ini
+.d/
+.venv/
