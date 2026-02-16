@@ -1,0 +1,48 @@
+PROS Simulation Important Bits (No Code Copy)
+
+1) Current repo status
+- There is already a headless simulator under sim/.
+- It models physics (mass/inertia + omni friction behavior), motors, sensors, and logging.
+- It is currently Python-based with a lightweight PROS-style adapter, not full PROS C++ runtime.
+
+2) Where to tune behavior
+- sim/config/robot.yaml: weight (mass), inertia, wheel geometry, friction/slip response, battery, motor count.
+- sim/config/noise.yaml: IMU/rotation noise, latency, dropout.
+- sim/config/faults.yaml: motor mismatch/deadband variation.
+- sim/config/run.yaml: loop timestep, run duration, realtime and reload interval.
+
+3) How it runs
+- Runner supports scenario-based commands or PROS-like module control.
+- It writes:
+  - trace.csv (state + commands + sensor values + slip)
+  - param_events.csv (hot-reload events)
+  - report.json (summary metrics)
+
+4) What it can already help diagnose
+- Overshoot tendencies from trace and final state metrics.
+- Slip behavior under speed and mass changes.
+- Possible reversed motors by comparing command sign and measured wheel/rotation direction.
+
+5) What to enforce for your real PROS code integration
+- One centralized drive output path (all motor writes pass through it).
+- One centralized sensor input path (odometry/heading/wheel velocity access).
+- Telemetry each control loop:
+  - time
+  - left/right command
+  - measured left/right velocity
+  - heading target and measured
+  - position target and measured (if available)
+  - control errors (P/I/D terms if used)
+
+6) Diagnostic checks to add first
+- Reversed motor check:
+  - command magnitude above threshold while measured velocity stays opposite sign for a time window.
+- Overshoot check:
+  - target error crosses zero and exceeds allowed peak beyond tolerance.
+- Settling check:
+  - error must stay in a tolerance band for required hold time.
+- Oscillation check:
+  - repeated sign changes above minimum amplitude.
+
+7) Practical next step with your PROS project
+- When your PROS code arrives, map it to a small hardware abstraction layer so the same autonomous logic can run in sim and on robot.

@@ -1,0 +1,13 @@
+segments:
+  - duration_s: 1.8
+    left_cmd: 0.65
+    right_cmd: 0.65
+  - duration_s: 0.7
+    left_cmd: 0.45
+    right_cmd: -0.45
+  - duration_s: 1.4
+    left_cmd: 0.75
+    right_cmd: 0.75
+  - duration_s: 0.5
+    left_cmd: 0.0
+    right_cmd: 0.0

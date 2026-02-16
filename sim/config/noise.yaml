@@ -1,0 +1,11 @@
+seed: 42
+imu_sigma_deg: 0.12
+imu_bias_init_deg: 0.4
+imu_bias_rw_deg_per_sqrt_s: 0.03
+imu_latency_ms: 8.0
+imu_dropout_rate: 0.0008
+
+rotation_sigma_deg: 0.15
+rotation_quant_deg: 0.1
+rotation_latency_ms: 6.0
+rotation_dropout_rate: 0.0005
