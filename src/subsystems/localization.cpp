@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "api.h"
+#include "robot/ports.h"
 #include "subsystems/sensors.h"
 
 namespace {
@@ -13,6 +14,7 @@ pros::Mutex pose_mutex;
 localization::Pose g_pose{};
 double g_heading_offset_deg = 0.0;
 double g_last_odom_in = 0.0;
+double g_last_heading_deg = 0.0;
 
 pros::Task* g_task = nullptr;
 bool g_task_running = false;
@@ -31,10 +33,17 @@ double fused_heading_deg(void) {
 void tracking_task(void*) {
   while (g_task_running) {
     const double odom_in = sensors::odom_inches();
-    const double delta_in = odom_in - g_last_odom_in;
+    const double raw_delta_in = odom_in - g_last_odom_in;
     g_last_odom_in = odom_in;
 
     const double heading_deg = fused_heading_deg();
+    const double delta_heading_deg = wrap_deg(heading_deg - g_last_heading_deg);
+    g_last_heading_deg = heading_deg;
+
+    // Subtract wheel travel induced by turning if tracking wheel is laterally offset from center.
+    const double turn_induced_in =
+        robot::ports::kOdomWheelLateralOffsetIn * (delta_heading_deg * kDegToRad);
+    const double delta_in = raw_delta_in - turn_induced_in;
     const double heading_rad = heading_deg * kDegToRad;
     const double dx = delta_in * std::cos(heading_rad);
     const double dy = delta_in * std::sin(heading_rad);
@@ -70,6 +79,7 @@ void reset_pose(double x_in, double y_in, double heading_deg) {
   sensors::tare_odom();
   g_last_odom_in = sensors::odom_inches();
   g_heading_offset_deg = wrap_deg(heading_deg - wrap_deg(sensors::heading_deg()));
+  g_last_heading_deg = wrap_deg(heading_deg);
 
   pose_mutex.take();
   g_pose.x_in = x_in;

@@ -105,8 +105,10 @@ void opcontrol(void) {
 
   while (true) {
     const std::uint32_t loop_start_us = pros::micros();
-    const int left = apply_deadband(master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y), 5);
-    const int right = apply_deadband(master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_Y), 5);
+    const int left =
+        apply_deadband(master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y), robot::ports::kTankJoystickDeadband);
+    const int right =
+        apply_deadband(master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_Y), robot::ports::kTankJoystickDeadband);
     drive::tank(left, right);
 
     if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {

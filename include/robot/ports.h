@@ -31,5 +31,11 @@ constexpr char kGoalFlapAdiPort = 'A';
 constexpr char kLoaderAdiPort = 'C';
 
 // Odom conversion (forward tracking wheel)
-constexpr double kOdomWheelDiameterIn = 2.0;
+// pushback_sbot uses LemLib Omniwheel::NEW_2 (2.125 in).
+constexpr double kOdomWheelDiameterIn = 2.125;
+// Lateral offset of forward tracking wheel from robot center (inches).
+constexpr double kOdomWheelLateralOffsetIn = 0.085;
+
+// Driver control shaping
+constexpr int kTankJoystickDeadband = 10;
 }  // namespace robot::ports

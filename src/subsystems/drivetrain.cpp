@@ -31,12 +31,12 @@ int clamp_power(int value) { return std::clamp(value, -127, 127); }
 
 namespace drivetrain {
 void init(void) {
-  left_front.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
-  left_middle.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
-  left_back.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
-  right_front.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
-  right_middle.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
-  right_back.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
+  left_front.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+  left_middle.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+  left_back.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+  right_front.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+  right_middle.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
+  right_back.set_brake_mode(pros::E_MOTOR_BRAKE_COAST);
 }
 
 void set_tank(int left, int right) {
