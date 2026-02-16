@@ -1,17 +1,17 @@
 mass_kg: 6.2
 izz_kgm2: 0.14
-wheel_radius_m: 0.0508
-track_width_m: 0.305
+wheel_radius_m: 0.041275
+track_width_m: 0.254
 
 # Omni orthotropic friction and slip response
-mu_long: 1.05
-mu_lat: 0.32
-k_long_n_per_mps: 110.0
-k_lat_n_per_mps: 75.0
-c_drag_n_per_mps: 2.5
+mu_long: 1.15
+mu_lat: 0.26
+k_long_n_per_mps: 20.0
+k_lat_n_per_mps: 28.0
+c_drag_n_per_mps: 0.45
 
-# V5 motor approximations (blue cartridge default)
-cartridge_rpm: 600.0
+# V5 motor approximations (green cartridge / 18:1)
+cartridge_rpm: 200.0
 stall_torque_nm: 0.35
 motor_count_left: 3
 motor_count_right: 3
