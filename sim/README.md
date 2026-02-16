@@ -1,6 +1,7 @@
 # Headless VEX V5 Simulator
 
-High-fidelity 2D headless simulator for a 6-motor VEX V5 omni tank drivetrain.
+High-fidelity 2D simulator for a 6-motor VEX V5 omni tank drivetrain.
+Designed for controller validation and diagnostics before on-robot testing.
 
 ## Features
 - Inertia-aware rigid-body dynamics (mass + moment of inertia)
@@ -16,10 +17,19 @@ High-fidelity 2D headless simulator for a 6-motor VEX V5 omni tank drivetrain.
 ## Quick Start
 ```bash
 cd sim
-python3 -m pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 python3 run.py --out output/demo --duration 10
 # live visualization
 python3 run.py --out output/demo --duration 10 --visualize
+```
+
+## Recommended Validation Sequence
+```bash
+python tools/validate_suite.py
+python run.py --scenario scenarios/default_auton.yaml --out output/default --duration 14 --no-realtime
+python run.py --waypoint-path scenarios/complex_waypoint_course.yaml --out output/waypoints --duration 22 --no-realtime
 ```
 
 Edit these during runtime to hot-reload dynamics/sensor behavior:
@@ -43,6 +53,7 @@ python3 tools/validate_suite.py
 ## Notes
 - Realism is prioritized over speed.
 - `--realtime` is enabled by default; use `--no-realtime` for fastest offline replay.
+- This simulator is tuned to current robot assumptions in `sim/config/robot.yaml`.
 - `report.json` now includes a `diagnostics` section with:
   - reverse motor mismatch events
   - turn overshoot estimate (scripted turn segments)

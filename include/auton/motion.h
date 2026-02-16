@@ -5,6 +5,7 @@
 #include "auton/diagnostics.h"
 
 namespace auton {
+// Generic trapezoidal-profile constraints used by distance and turn helpers.
 struct MotionConstraints {
   double max_speed = 24.0;       // in/s for linear, deg/s for angular
   double max_accel = 60.0;       // in/s^2 for linear, deg/s^2 for angular
@@ -14,6 +15,7 @@ struct MotionConstraints {
   double overshoot_error = 4.0;
 };
 
+// State-feedback go-to-point settings for IMU + forward-odom localization.
 struct GoToPointConstraints {
   std::uint32_t timeout_ms = 3500;
   std::uint32_t settle_time_ms = 250;

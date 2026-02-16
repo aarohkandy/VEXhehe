@@ -1,6 +1,5 @@
 #include "main.h"
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -12,14 +11,12 @@
 #include "subsystems/drive.h"
 #include "subsystems/localization.h"
 #include "subsystems/sensors.h"
+#include "util/loop_stats.h"
 
 namespace {
-struct LoopStats {
-  std::uint32_t iterations = 0;
-  std::uint32_t min_us = 0xFFFFFFFFu;
-  std::uint32_t max_us = 0;
-  std::uint64_t total_us = 0;
-};
+constexpr std::uint32_t kImuCalibratePollMs = 20;
+constexpr std::uint32_t kDriverLoopDtMs = 10;
+constexpr std::uint32_t kDriverStatsPrintPeriodMs = 2000;
 
 int apply_deadband(int input, int deadband) { return (std::abs(input) < deadband) ? 0 : input; }
 
@@ -33,30 +30,16 @@ void log_port_map(void) {
          robot::ports::kRightDriveReversed ? 1 : 0);
 }
 
-void capture_loop_time(LoopStats* stats, std::uint32_t dt_us) {
-  stats->iterations++;
-  stats->total_us += dt_us;
-  stats->min_us = std::min(stats->min_us, dt_us);
-  stats->max_us = std::max(stats->max_us, dt_us);
-}
-
-void print_loop_stats(const char* label, const LoopStats& stats) {
-  if (stats.iterations == 0) return;
-  const double avg_us = static_cast<double>(stats.total_us) / static_cast<double>(stats.iterations);
-  const double hz = avg_us > 1e-6 ? 1e6 / avg_us : 0.0;
-  printf("LOOP_STATS,label=%s,iters=%lu,avg_us=%.1f,min_us=%lu,max_us=%lu,hz=%.2f\n", label,
-         static_cast<unsigned long>(stats.iterations), avg_us, static_cast<unsigned long>(stats.min_us),
-         static_cast<unsigned long>(stats.max_us), hz);
-}
 }  // namespace
 
 void initialize(void) {
+  // Print static mapping first so hardware mistakes are obvious on boot.
   log_port_map();
   drivetrain::init();
   intake::init();
   indexer::init();
   sensors::init();
-  while (sensors::imu_calibrating()) pros::delay(20);
+  while (sensors::imu_calibrating()) pros::delay(kImuCalibratePollMs);
   localization::reset_pose(0.0, 0.0, 0.0);
   localization::init();
 }
@@ -69,6 +52,8 @@ void competition_initialize(void) {
 }
 
 void autonomous(void) {
+  // Current default autonomous is a three-leg go-to-point demo route.
+  // Keep it simple and deterministic so tuning data stays comparable run-to-run.
   localization::reset_pose(0.0, 0.0, 0.0);
 
   auton::GoToPointConstraints gtp{};
@@ -99,8 +84,7 @@ void autonomous(void) {
 
 void opcontrol(void) {
   pros::Controller master(pros::E_CONTROLLER_MASTER);
-  constexpr std::uint32_t kLoopDtMs = 10;
-  LoopStats driver_loop_stats{};
+  util::LoopStats driver_loop_stats{};
   std::uint32_t report_timer_ms = 0;
 
   while (true) {
@@ -124,12 +108,12 @@ void opcontrol(void) {
 
     intake::update();
     indexer::update();
-    capture_loop_time(&driver_loop_stats, pros::micros() - loop_start_us);
-    report_timer_ms += kLoopDtMs;
-    if (report_timer_ms >= 2000) {
-      print_loop_stats("opcontrol", driver_loop_stats);
+    util::capture_loop_time(&driver_loop_stats, pros::micros() - loop_start_us);
+    report_timer_ms += kDriverLoopDtMs;
+    if (report_timer_ms >= kDriverStatsPrintPeriodMs) {
+      util::print_loop_stats("opcontrol", driver_loop_stats);
       report_timer_ms = 0;
     }
-    pros::delay(kLoopDtMs);
+    pros::delay(kDriverLoopDtMs);
   }
 }

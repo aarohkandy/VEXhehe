@@ -7,6 +7,7 @@
 #include "subsystems/drivetrain.h"
 #include "subsystems/localization.h"
 #include "subsystems/sensors.h"
+#include "util/loop_stats.h"
 
 namespace {
 constexpr std::uint32_t kLoopDtMs = 10;
@@ -33,29 +34,6 @@ struct Pid {
 auton::MotionSummary g_last_summary{};
 
 double clamp(double value, double lo, double hi) { return std::max(lo, std::min(value, hi)); }
-
-struct LoopStats {
-  std::uint32_t iterations = 0;
-  std::uint32_t min_us = 0xFFFFFFFFu;
-  std::uint32_t max_us = 0;
-  std::uint64_t total_us = 0;
-};
-
-void capture_loop_time(LoopStats* stats, std::uint32_t dt_us) {
-  stats->iterations++;
-  stats->total_us += dt_us;
-  stats->min_us = std::min(stats->min_us, dt_us);
-  stats->max_us = std::max(stats->max_us, dt_us);
-}
-
-void print_loop_stats(const char* label, const LoopStats& stats) {
-  if (stats.iterations == 0) return;
-  const double avg_us = static_cast<double>(stats.total_us) / static_cast<double>(stats.iterations);
-  const double hz = avg_us > 1e-6 ? 1e6 / avg_us : 0.0;
-  printf("LOOP_STATS,label=%s,iters=%lu,avg_us=%.1f,min_us=%lu,max_us=%lu,hz=%.2f\n", label,
-         static_cast<unsigned long>(stats.iterations), avg_us, static_cast<unsigned long>(stats.min_us),
-         static_cast<unsigned long>(stats.max_us), hz);
-}
 
 double wrap_deg(double angle) {
   while (angle > 180.0) angle -= 360.0;
@@ -161,7 +139,7 @@ MotionSummary drive_distance_inches(double target_inches, const MotionConstraint
   std::uint32_t settled_ms = 0;
   int mismatch_samples = 0;
   bool overshot = false;
-  LoopStats loop_stats{};
+  util::LoopStats loop_stats{};
 
   MotionSummary summary{};
   summary.max_overshoot = 0.0;
@@ -221,7 +199,7 @@ MotionSummary drive_distance_inches(double target_inches, const MotionConstraint
     });
 
     t_ms += kLoopDtMs;
-    capture_loop_time(&loop_stats, pros::micros() - start_us);
+    util::capture_loop_time(&loop_stats, pros::micros() - start_us);
     pros::delay(kLoopDtMs);
   }
 
@@ -231,7 +209,7 @@ MotionSummary drive_distance_inches(double target_inches, const MotionConstraint
   set_result_by_priority(&summary, t_ms >= constraints.timeout_ms, overshot);
   g_last_summary = summary;
   diag::end_motion_trace(summary);
-  print_loop_stats("drive_distance", loop_stats);
+  util::print_loop_stats("drive_distance", loop_stats);
   return summary;
 }
 
@@ -247,7 +225,7 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
   std::uint32_t settled_ms = 0;
   int mismatch_samples = 0;
   bool overshot = false;
-  LoopStats loop_stats{};
+  util::LoopStats loop_stats{};
 
   MotionSummary summary{};
   summary.max_overshoot = 0.0;
@@ -311,7 +289,7 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
     });
 
     t_ms += kLoopDtMs;
-    capture_loop_time(&loop_stats, pros::micros() - start_us);
+    util::capture_loop_time(&loop_stats, pros::micros() - start_us);
     pros::delay(kLoopDtMs);
   }
 
@@ -321,7 +299,7 @@ MotionSummary turn_angle_deg(double target_degrees, const MotionConstraints& con
   set_result_by_priority(&summary, t_ms >= constraints.timeout_ms, overshot);
   g_last_summary = summary;
   diag::end_motion_trace(summary);
-  print_loop_stats("turn_angle", loop_stats);
+  util::print_loop_stats("turn_angle", loop_stats);
   return summary;
 }
 
@@ -334,7 +312,7 @@ MotionSummary go_to_point_inches(double x_in, double y_in, const GoToPointConstr
   std::uint32_t t_ms = 0;
   std::uint32_t settled_ms = 0;
   int mismatch_samples = 0;
-  LoopStats loop_stats{};
+  util::LoopStats loop_stats{};
 
   MotionSummary summary{};
   summary.max_overshoot = 0.0;
@@ -407,7 +385,7 @@ MotionSummary go_to_point_inches(double x_in, double y_in, const GoToPointConstr
     });
 
     t_ms += kLoopDtMs;
-    capture_loop_time(&loop_stats, pros::micros() - start_us);
+    util::capture_loop_time(&loop_stats, pros::micros() - start_us);
     pros::delay(kLoopDtMs);
   }
 
@@ -418,7 +396,7 @@ MotionSummary go_to_point_inches(double x_in, double y_in, const GoToPointConstr
   set_result_by_priority(&summary, t_ms >= constraints.timeout_ms, false);
   g_last_summary = summary;
   diag::end_motion_trace(summary);
-  print_loop_stats("go_to_point", loop_stats);
+  util::print_loop_stats("go_to_point", loop_stats);
   return summary;
 }
 

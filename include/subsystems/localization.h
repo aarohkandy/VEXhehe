@@ -10,6 +10,7 @@ struct Pose {
   std::uint32_t timestamp_ms = 0;
 };
 
+// Starts a 10 ms background task that integrates forward-odometry + IMU heading.
 void init(void);
 void shutdown(void);
 
